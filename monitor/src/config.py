@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
+import logging
 import os
 
 
@@ -34,7 +35,28 @@ def load_config() -> Config:
     cron_expression = os.environ.get("MONITOR_CRON", "0 * * * *").strip() or "0 * * * *"
 
     host_label = os.environ.get("HOST_LABEL", "").strip() or None
-    host_root_path = Path(os.environ.get("HOST_ROOT_PATH", "/hostfs").strip() or "/hostfs")
+    raw_host_root = os.environ.get("HOST_ROOT_PATH", "/hostfs").strip() or "/hostfs"
+    host_root_candidates = []
+
+    explicit_path = Path(raw_host_root)
+    host_root_candidates.append(explicit_path)
+
+    if explicit_path != Path("/proc/1/root"):
+        host_root_candidates.append(Path("/proc/1/root"))
+    if explicit_path != Path("/"):
+        host_root_candidates.append(Path("/"))
+
+    host_root_path = explicit_path
+    for candidate in host_root_candidates:
+        if candidate.exists():
+            if candidate != explicit_path:
+                logging.info(
+                    "Host root %s not accessible; falling back to %s", explicit_path, candidate
+                )
+            host_root_path = candidate
+            break
+    else:
+        logging.warning("Could not resolve a valid host root path; using %s", explicit_path)
 
     disk_include = _split_csv(os.environ.get("DISK_INCLUDE"))
     disk_exclude = _split_csv(os.environ.get("DISK_EXCLUDE"))

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence
+from typing import Dict, Iterable, List, Sequence, Tuple
 import logging
 import os
 import socket
@@ -59,36 +59,91 @@ def _resolve_host_path(root: Path, mount_point: str) -> Path:
     return root / mount_point.lstrip("/")
 
 
-def _iter_host_mounts(host_root: Path) -> Iterable[tuple[str, str, str]]:
-    mounts_file = host_root / "proc" / "mounts"
-    if not mounts_file.exists():
-        logging.warning("Host mounts file %s not accessible; disk metrics will be empty", mounts_file)
-        return []
+def _decode_mount_field(value: str) -> str:
+    return value.replace("\\040", " ").replace("\\011", "\t")
 
+
+def _parse_mounts_table(handle: Iterable[str]) -> List[Tuple[str, str, str]]:
+    entries: List[Tuple[str, str, str]] = []
     seen: set[str] = set()
-    with mounts_file.open("r", encoding="utf-8") as handle:
-        for raw_line in handle:
-            parts = raw_line.split()
-            if len(parts) < 3:
-                continue
-            device, mount_point, fs_type = parts[:3]
-            key = f"{device}:{mount_point}"
-            if key in seen:
-                continue
-            seen.add(key)
-            if fs_type in _PSEUDO_FS_TYPES:
-                continue
-            yield device, mount_point, fs_type
+    for raw_line in handle:
+        parts = raw_line.split()
+        if len(parts) < 3:
+            continue
+        device, mount_point, fs_type = parts[:3]
+        key = f"{device}:{mount_point}"
+        if key in seen:
+            continue
+        seen.add(key)
+        if fs_type in _PSEUDO_FS_TYPES:
+            continue
+        entries.append((device, mount_point, fs_type))
+    return entries
+
+
+def _parse_mountinfo_table(handle: Iterable[str]) -> List[Tuple[str, str, str]]:
+    entries: List[Tuple[str, str, str]] = []
+    seen: set[str] = set()
+    for raw_line in handle:
+        parts = raw_line.split()
+        if len(parts) < 10:
+            continue
+        mount_point = _decode_mount_field(parts[4])
+        fs_type = parts[-3]
+        source = parts[-2]
+        key = f"{source}:{mount_point}"
+        if key in seen:
+            continue
+        seen.add(key)
+        if fs_type in _PSEUDO_FS_TYPES:
+            continue
+        entries.append((source, mount_point, fs_type))
+    return entries
+
+
+def _load_mount_entries(config: Config) -> List[Tuple[str, str, str]]:
+    candidates: List[Tuple[str, Path, str]] = []
+    host_mounts = config.host_root_path / "proc" / "mounts"
+    candidates.append(("host_root", host_mounts, "mounts"))
+
+    candidates.append(("proc1", Path("/proc/1/mountinfo"), "mountinfo"))
+    candidates.append(("container", Path("/proc/mounts"), "mounts"))
+
+    for label, path, table_type in candidates:
+        if table_type == "mounts":
+            parser = _parse_mounts_table
+        else:
+            parser = _parse_mountinfo_table
+
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                entries = parser(handle)
+        except FileNotFoundError:
+            continue
+        except PermissionError:
+            logging.warning("Insufficient permission to read mount table %s", path)
+            continue
+
+        if entries:
+            if label != "host_root":
+                logging.debug("Using mount table %s for disk metrics", path)
+            return entries
+
+    logging.warning("No accessible mount tables found; disk metrics will be empty")
+    return []
 
 
 def capture_disk_usage(config: Config) -> List[DiskSnapshot]:
     snapshots: List[DiskSnapshot] = []
-    for device, mount_point, fs_type in _iter_host_mounts(config.host_root_path):
+    for device, mount_point, fs_type in _load_mount_entries(config):
         if not _should_include(mount_point, config.disk_include, config.disk_exclude):
             continue
 
         host_path = _resolve_host_path(config.host_root_path, mount_point)
         if not host_path.exists():
+            continue
+
+        if not host_path.is_dir():
             continue
 
         try:

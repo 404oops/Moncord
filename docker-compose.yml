@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  moncord:
+    image: ${MONCORD_IMAGE:-ghcr.io/404oops/moncord:latest}
+    container_name: moncord
+    restart: unless-stopped
+    environment:
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-https://discord.com/api/webhooks/replace-me}
+      DISCORD_USERNAME: ${DISCORD_USERNAME:-Moncord}
+      DISCORD_AVATAR_URL: ${DISCORD_AVATAR_URL:-}
+      MONITOR_CRON: "${MONITOR_CRON:-0 * * * *}"
+      HOST_LABEL: ${HOST_LABEL:-}
+      HOST_ROOT_PATH: ${HOST_ROOT_PATH:-/hostfs}
+      DISK_INCLUDE: ${DISK_INCLUDE:-}
+      DISK_EXCLUDE: ${DISK_EXCLUDE:-}
+    volumes:
+      - /:/hostfs:ro
+      - /proc:/hostfs/proc:ro
+    pid: host
+    stop_signal: SIGTERM

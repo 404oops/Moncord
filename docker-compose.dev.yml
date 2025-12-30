@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  moncord:
+    build:
+      context: ./monitor
+      args:
+        VERSION: ${MONCORD_VERSION:-dev}
+        VCS_REF: ${MONCORD_VCS_REF:-dev}
+        BUILD_DATE: ${MONCORD_BUILD_DATE:-unknown}
+    image: ${MONCORD_IMAGE:-ghcr.io/404oops/moncord:dev}

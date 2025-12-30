@@ -18,6 +18,7 @@ _PSEUDO_FS_TYPES = {
     "devtmpfs",
     "tmpfs",
     "devpts",
+    "overlay",
     "squashfs",
     "mqueue",
     "hugetlbfs",
@@ -26,6 +27,13 @@ _PSEUDO_FS_TYPES = {
     "autofs",
     "fusectl",
     "tracefs",
+    "binfmt_misc",
+    "efivarfs",
+    "bpf",
+    "pstore",
+    "configfs",
+    "debugfs",
+    "securityfs",
 }
 
 
@@ -136,9 +144,34 @@ def _load_mount_entries(config: Config) -> List[Tuple[str, str, str]]:
     return []
 
 
+def _display_mount_point(mount_point: str, host_root: Path) -> str:
+    """Strip host root prefix from mount point for cleaner display."""
+    root_str = str(host_root)
+    if mount_point.startswith(root_str) and mount_point != root_str:
+        stripped = mount_point[len(root_str):]
+        return stripped if stripped.startswith("/") else "/" + stripped
+    if mount_point == root_str:
+        return "/"
+    return mount_point
+
+
 def capture_disk_usage(config: Config) -> List[DiskSnapshot]:
     snapshots: List[DiskSnapshot] = []
-    for device, mount_point, fs_type in _load_mount_entries(config):
+    has_hostfs_root = False
+    entries = list(_load_mount_entries(config))
+
+    # Check if we have a hostfs root mount
+    root_str = str(config.host_root_path)
+    for _, mount_point, _ in entries:
+        if mount_point == root_str or mount_point.startswith(root_str + "/"):
+            has_hostfs_root = True
+            break
+
+    for device, mount_point, fs_type in entries:
+        # Skip bare root if hostfs root is present (avoids duplicate)
+        if mount_point == "/" and has_hostfs_root:
+            logging.debug("Skipping root mount / because hostfs root is present")
+            continue
         if not _should_include(mount_point, config.disk_include, config.disk_exclude):
             logging.debug("Skipping mount %s due to include/exclude filters", mount_point)
             continue
@@ -164,7 +197,7 @@ def capture_disk_usage(config: Config) -> List[DiskSnapshot]:
         snapshots.append(
             DiskSnapshot(
                 device=device,
-                mount_point=mount_point,
+                mount_point=_display_mount_point(mount_point, config.host_root_path),
                 filesystem=fs_type,
                 total_gb=_format_bytes(usage.total),
                 used_gb=_format_bytes(usage.used),

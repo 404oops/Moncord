@@ -18,7 +18,6 @@ _PSEUDO_FS_TYPES = {
     "devtmpfs",
     "tmpfs",
     "devpts",
-    "overlay",
     "squashfs",
     "mqueue",
     "hugetlbfs",
@@ -137,13 +136,16 @@ def capture_disk_usage(config: Config) -> List[DiskSnapshot]:
     snapshots: List[DiskSnapshot] = []
     for device, mount_point, fs_type in _load_mount_entries(config):
         if not _should_include(mount_point, config.disk_include, config.disk_exclude):
+            logging.debug("Skipping mount %s due to include/exclude filters", mount_point)
             continue
 
         host_path = _resolve_host_path(config.host_root_path, mount_point)
         if not host_path.exists():
+            logging.debug("Skipping mount %s because %s does not exist", mount_point, host_path)
             continue
 
         if not host_path.is_dir():
+            logging.debug("Skipping mount %s because %s is not a directory", mount_point, host_path)
             continue
 
         try:

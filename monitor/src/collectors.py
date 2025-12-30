@@ -53,6 +53,10 @@ def _should_include(mount_point: str, include: Sequence[str], exclude: Sequence[
 
 
 def _resolve_host_path(root: Path, mount_point: str) -> Path:
+    root_str = str(root)
+    # If mount_point already starts with the host root path, use it directly
+    if mount_point.startswith(root_str):
+        return Path(mount_point)
     if mount_point == "/":
         return root
     return root / mount_point.lstrip("/")

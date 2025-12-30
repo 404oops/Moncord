@@ -15,7 +15,7 @@ DEFAULT_TEMPLATES = {
         "\nCron schedule: `{cron_expression}`\nUptime: {uptime_human}"
     ),
     "heartbeat": (
-        ":satellite: Hourly report for **{hostname}** at {timestamp_local}"
+        ":satellite: Report for **{hostname}** at {timestamp_local}"
         "\nCPU {cpu_percent}% | Load {load_1}/{load_5}/{load_15}"
         "\nRAM {memory_used_gb}/{memory_total_gb} GiB ({memory_percent}%)"
         "\nUptime: {uptime_human}"

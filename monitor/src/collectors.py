@@ -224,10 +224,18 @@ def capture_cpu_stats() -> Dict[str, float]:
 
 def capture_memory_stats() -> Dict[str, float]:
     mem = psutil.virtual_memory()
+    # buffers + cached = disk cache; available on Linux, fallback to 0 elsewhere
+    buffers = getattr(mem, "buffers", 0)
+    cached = getattr(mem, "cached", 0)
+    cache_total = buffers + cached
     return {
         "memory_percent": round(mem.percent, 2),
         "memory_used_gb": _format_bytes(mem.used),
         "memory_total_gb": _format_bytes(mem.total),
+        "memory_available_gb": _format_bytes(mem.available),
+        "memory_buffers_gb": _format_bytes(buffers),
+        "memory_cached_gb": _format_bytes(cached),
+        "memory_cache_gb": _format_bytes(cache_total),
     }
 
 

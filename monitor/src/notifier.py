@@ -78,17 +78,29 @@ class DiscordNotifier:
     def _build_disks_block(self, snapshot: Dict[str, object]) -> List[str]:
         disks = snapshot.get("disks", [])
         if not disks:
-            return ["No eligible disks"]
+            return ["```\nNo eligible disks\n```"]
 
-        lines = []
+        # Filter out EFI partitions
+        disks = [d for d in disks if "/efi" not in d["mount_point"].lower()]
+        if not disks:
+            return ["```\nNo eligible disks\n```"]
+
+        # Calculate column widths
+        mount_width = max(len("MOUNT"), max(len(d["mount_point"]) for d in disks))
+        used_width = max(len("USED"), max(len(f"{d['used_gb']}/{d['total_gb']} GiB") for d in disks))
+
+        # Build header
+        header = f"{'MOUNT':<{mount_width}}  {'USED':>{used_width}}  {'%':>5}"
+        separator = "-" * len(header)
+
+        lines = [header, separator]
         for disk in disks:
-            lines.append(
-                f"{disk['mount_point']} ({disk['filesystem']})"
-                f": {disk['used_percent']}% used ({disk['used_gb']}/{disk['total_gb']} GiB)"
-            )
+            used_str = f"{disk['used_gb']}/{disk['total_gb']} GiB"
+            pct_str = f"{disk['used_percent']:>5.1f}"
+            lines.append(f"{disk['mount_point']:<{mount_width}}  {used_str:>{used_width}}  {pct_str}")
 
-        text = "\n".join(lines)
-        return list(self._chunk_text(text))
+        text = "```\n" + "\n".join(lines) + "\n```"
+        return list(self._chunk_text(text, size=1990))
 
     def _build_context(self, event: str, snapshot: Dict[str, object]) -> Dict[str, object]:
         timestamp_iso = snapshot.get("timestamp_iso")
@@ -118,6 +130,10 @@ class DiscordNotifier:
             "memory_percent": memory.get("memory_percent", 0),
             "memory_used_gb": memory.get("memory_used_gb", 0),
             "memory_total_gb": memory.get("memory_total_gb", 0),
+            "memory_available_gb": memory.get("memory_available_gb", 0),
+            "memory_cache_gb": memory.get("memory_cache_gb", 0),
+            "memory_buffers_gb": memory.get("memory_buffers_gb", 0),
+            "memory_cached_gb": memory.get("memory_cached_gb", 0),
             "uptime_human": uptime.get("uptime_human", "n/a"),
             "disks_chunks": self._build_disks_block(snapshot),
         }
@@ -174,7 +190,8 @@ class DiscordNotifier:
                 "name": "Memory",
                 "value": (
                     f"Usage: {context['memory_percent']}%\n"
-                    f"{context['memory_used_gb']}/{context['memory_total_gb']} GiB"
+                    f"{context['memory_used_gb']}/{context['memory_total_gb']} GiB\n"
+                    f"Cache: {context['memory_cache_gb']} GiB"
                 ),
                 "inline": True,
             }

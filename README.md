@@ -1,5 +1,7 @@
 # Moncord
 
+> Warning: This project is vibecoded, but all code was screened, and the screening established that there's nothing harmful about this program, as it's pragmatically impossible for it to screw with your system. If you, for some reason, experience any faults, like missing disks or feature requests, drop an issue. This is nothing more than a quick project made for my server.
+
 Moncord is a containerized system monitor that gathers host CPU, memory, uptime, and disk statistics before sending templated updates to a Discord webhook. Ships with hourly heartbeats, startup/shutdown alerts, and cron-configurable scheduling.
 
 ## Features
@@ -17,6 +19,7 @@ services:
   moncord:
     image: ghcr.io/404oops/moncord:latest
     container_name: moncord
+    hostname: Homelab # This should be the name of the machine you'll be monitorint.
     restart: unless-stopped
     environment:
       DISCORD_WEBHOOK_URL: https://discord.com/api/webhooks/replace-me
@@ -33,12 +36,6 @@ services:
     pid: host
     stop_signal: SIGTERM
 ```
-
-## Container Images
-
-- GitHub Actions workflow [`.github/workflows/publish.yml`](.github/workflows/publish.yml) builds multi-architecture images (amd64/arm64) and pushes them to GitHub Container Registry on every push to `main` and on `v*` tags.
-- Images are published under `ghcr.io/<owner>/moncord`. Override the target with the `MONCORD_IMAGE` environment variable if you need a different registry path.
-- Make sure the repository has `packages: write` permission for the default `GITHUB_TOKEN` (automatic for public repos).
 
 ## Environment Variables
 
